@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local build and temporary files
+.build/
+*.tmp
+*.part
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

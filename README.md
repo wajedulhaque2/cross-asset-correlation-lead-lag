@@ -1,117 +1,276 @@
-# Cross-Asset Correlation & Lead–Lag Explorer
+# Cross-Asset Correlation and Lead-Lag Research Lab
 
-A reusable Python research notebook for testing contemporaneous correlation, rolling dependence, lead–lag structure and bidirectional predictive information between two Yahoo Finance tickers.
+A Python/Jupyter quantitative research project for measuring contemporaneous dependence, testing lead-lag structure, discovering candidate equity relationships, evaluating them out of sample and monitoring current signals.
 
-The default case studies **Brent crude futures (`BZ=F`) vs Shell plc (`SHEL.L`)**, but the notebook is ticker-agnostic: edit the controls or use the interactive research panel to compare stocks, commodities, ETFs, indices or other supported instruments.
+The project is designed to separate four questions that are often conflated:
 
-## What the project does
+1. Are two assets related on the same day?
+2. Is there statistically detectable delayed structure?
+3. Does that delayed structure survive walk-forward testing after costs?
+4. Is a historically interesting relationship active now?
 
-The notebook builds the analysis in layers rather than jumping from a correlation coefficient to a causal story:
+The notebook uses Yahoo Finance market data and an interactive `ipywidgets` Strategy Lab.
 
-1. downloads adjusted market data and audits trading-calendar mismatches;
-2. aligns both assets on common observed dates without forward-filling;
-3. converts prices to daily log returns;
-4. measures Pearson and Spearman contemporaneous correlation;
-5. tracks 20-, 60- and 120-observation rolling correlations and historical percentiles;
-6. scans lead–lag correlations over a symmetric lag range using the **same observation count at every lag**;
-7. applies Bonferroni family-wise multiple-testing correction;
-8. estimates selected-lag uncertainty with a moving-block bootstrap and block-size sensitivity;
-9. checks return stationarity with the Augmented Dickey–Fuller test;
-10. tests Granger predictive information in both directions with corrected p-values;
-11. repeats the lag search through rolling windows to measure stability;
-12. generates a compact evidence table and a dynamic conclusion.
+## Project workflow
 
-## Interactive research panel
+The Strategy Lab contains five tabs.
 
-After running the notebook through the research-engine cells, an `ipywidgets` panel lets you enter two tickers and a date range and generate the compact research dashboard from the same methodology.
+### Research Pair
 
-The manual controls remain the authoritative configuration for a full **Run All**:
+Runs the full statistical investigation for two selected Yahoo Finance tickers:
 
-```python
-ASSET_A = "BZ=F"
-ASSET_B = "SHEL.L"
+- trading-calendar alignment without forward-filling
+- daily log returns
+- Pearson and Spearman dependence
+- rolling correlation
+- equal-sample lead-lag scanning
+- multiple-testing correction
+- moving-block bootstrap
+- Augmented Dickey-Fuller stationarity checks
+- bidirectional Granger predictive-information tests
+- rolling lag-stability analysis
 
-START_DATE = "2015-01-01"
-END_DATE = "2026-08-24"
+### Backtest Pair
 
-ROLLING_WINDOWS = [20, 60, 120]
-MAX_LAG = 20
+Tests one specified pair with a walk-forward model.
 
-BOOTSTRAP_SAMPLES = 1000
-BOOTSTRAP_BLOCK_SIZE = 20
-BOOTSTRAP_BLOCK_SIZES = [10, 20, 40]
+At each rebalance, leader, follower, lag horizon and forward-response beta are re-estimated using only the formation window. A completed leader return is observed before the follower position begins at the next available adjusted open. Transaction costs are applied when exposure changes.
 
-GRANGER_MAX_LAG = 10
+This tab is intended for focused pair research. It is separate from the universe-level discovery test.
 
-ROLLING_LAG_WINDOW = 252
-ROLLING_LAG_STEP = 21
+### Discover
+
+Builds a current liquid-equity universe through Yahoo Finance screening, downloads historical data, applies a cheap correlation funnel and performs deeper lead-lag analysis on the strongest candidates.
+
+Discover ranks relationships using:
+
+- same-day correlation
+- lag correlation
+- sign stability
+- lag-win share
+- corrected lag evidence
+- scanner-wide false-discovery-rate evidence
+- a transparent Opportunity Score
+
+Same-issuer and obvious share-class pairs can be excluded.
+
+### Scanner Backtest
+
+Tests the discovery process itself rather than selecting a pair with hindsight.
+
+At historical rebalance date $T$, candidate relationships are rebuilt using only trailing observations:
+
+<br>
+
+```math
+\Large \mathcal{C}_T = \mathrm{Scanner}(r_t : T-W \le t < T)
 ```
 
-Example Yahoo Finance tickers include `AAPL`, `MSFT`, `SHEL.L`, `RR.L`, `BZ=F`, `CL=F`, `GC=F`, `SPY` and `^FTSE`.
+<br>
 
-## Default Brent–Shell findings
+The top relationships are selected under the chosen evidence and ranking rule, then traded during the following out-of-sample block.
 
-The supplied 2015–August 2026 run produced the following reference results:
+This is the main strategy-level evidence because the candidate set itself is reconstructed through time.
 
-| Metric | Result |
-|---|---:|
-| Common aligned price observations | 2,875 |
-| Daily log-return observations | 2,874 |
-| Pearson return correlation | 0.481 |
-| Spearman return correlation | 0.455 |
-| Latest 120-observation correlation | 0.713 |
-| Latest 120-observation historical percentile | 98.8% |
-| Strongest equal-sample non-zero lag | +6 observations |
-| Lagged correlation | -0.099 |
-| 95% moving-block bootstrap interval | [-0.175, -0.017] |
-| +6 strongest in equal-sample rolling windows | 12.8% |
-| Lag magnitude exceeds same-day magnitude in rolling windows | 0.0% |
+### Investment Monitor
 
-The principal result is **not** that Brent mechanically leads Shell by six days. The data support a much stronger contemporaneous relationship, plus weaker delayed structure that is statistically detectable in the full sample but not stable enough to describe as a fixed market lag.
+Combines the current Discover evidence with the latest completed market observations.
 
-Bonferroni-corrected Granger tests were strongly asymmetric: `BZ=F → SHEL.L` specifications with maximum lags 6–10 survived correction, while only the Shell-to-Brent lag-7 specification survived and only narrowly.
+The monitor refreshes recent prices for discovered assets, re-estimates current relationship direction, lag sign and forward beta, standardises the latest leader return and classifies relationships into four research tiers.
 
-## Default-case charts
+- **Tier A:** active signal with strong positive scanner-backtest support
+- **Tier B:** active signal with limited historical support
+- **Tier C:** stable relationship waiting for a qualifying leader shock
+- **Tier D:** changed or invalidated current relationship
 
-### Rolling correlation
+The monitor also reports the shock-linked model response component:
 
-![Rolling correlation](assets/default_rolling_correlation.png)
+<br>
 
-### Equal-sample lead–lag scan
+```math
+\Large \widehat{R}^{F,\mathrm{shock}}_{t,t+h}
+=
+\hat{\beta}r^L_t.
+```
 
-![Equal-sample lead-lag scan](assets/default_equal_sample_lead_lag.png)
+<br>
+
+This is an economic-magnitude diagnostic, not a guaranteed follower return.
+
+## Statistical design
+
+### Log returns
+
+For adjusted price $P_t$:
+
+<br>
+
+```math
+\Large r_t
+=
+\ln(\frac{P_t}{P_{t-1}}).
+```
+
+<br>
+
+### Lag convention
+
+For Asset A and Asset B:
+
+<br>
+
+```math
+\Large \rho(k)
+=
+\mathrm{Corr}(r_t^A,r_{t+k}^B).
+```
+
+<br>
+
+Positive $k$ means Asset A leads Asset B. Negative $k$ means Asset B leads Asset A. The sign of the lag is separate from the sign of the correlation.
+
+### Equal-sample lag scan
+
+All candidate lags are evaluated on the same central sample. This prevents extreme lags from benefiting from a different observation count.
+
+### Multiple testing
+
+The project uses two distinct corrections:
+
+1. Bonferroni correction across lags within a pair.
+2. Benjamini-Hochberg false-discovery-rate correction across deep-stage candidate pairs in the discovery scan.
+
+The scanner-wide FDR is conditional on the screened candidate set rather than a perfect universe-wide correction.
 
 ### Moving-block bootstrap
 
-![Moving-block bootstrap](assets/default_bootstrap.png)
+The bootstrap resamples contiguous blocks rather than individual observations so short-run dependence is retained when estimating uncertainty around the selected lag correlation.
 
-### Bidirectional Granger tests
+### Granger tests
 
-![Bidirectional Granger tests](assets/default_granger.png)
+Granger tests are run in both directions. Statistical significance is interpreted as incremental predictive information under the tested autoregressive specification, not structural causality.
 
-### Rolling lag stability
+## Reference research findings
 
-![Rolling lag stability](assets/default_rolling_lag_stability.png)
+The original Brent crude futures (`BZ=F`) and Shell (`SHEL.L`) case study showed a strong contemporaneous relationship and much weaker delayed structure.
 
-## Methodology notes
+Reference results included:
 
-For aligned daily log returns $r_t^A$ and $r_t^B$, the lag convention is
+| Metric | Result |
+|---|---:|
+| Pearson daily log-return correlation | 0.481 |
+| Spearman correlation | 0.455 |
+| Strongest equal-sample non-zero lag | Brent leads by 6 observations |
+| Equal-sample lag correlation | about -0.099 |
+| 95% moving-block bootstrap interval | about [-0.175, -0.017] |
+| Fixed +6 lag strongest in rolling windows | about 13% |
+| Lag magnitude exceeding same-day correlation in rolling windows | 0% |
 
-$$
-\rho(k)=\operatorname{Corr}(r_t^A,r_{t+k}^B).
-$$
+The important conclusion is that statistical detectability of a lag is not the same as a stable fixed market delay. Same-day dependence dominates the relationship.
 
-Positive $k$ means Asset A leads Asset B; negative $k$ means Asset B leads Asset A. The sign of the correlation is separate from the sign of the lag.
+## Reference scanner-backtest snapshot
 
-Every candidate lag is evaluated on the same central sample of $n-2M$ observations, where $M$ is the maximum searched lag. This prevents extreme lags from winning simply because smaller samples make their estimated correlations noisier.
+A later 200-security Yahoo Finance screen retained 187 securities with sufficient history. Using the frozen primary research specification:
 
-The moving-block bootstrap preserves short contiguous runs of the selected lagged pair, providing a dependence-aware uncertainty estimate. Its interval is conditional on the selected lag, while Bonferroni correction separately addresses the search across multiple candidate lags.
+- 504-observation formation window
+- 63-observation rebalance interval
+- top 3 relationships
+- Opportunity Score ranking
+- scanner FDR gate <= 10%
+- absolute leader shock threshold >= 1.5
+- 10 bps one-way transaction cost
+- next-open follower execution
 
-Granger testing compares an autoregression of the target asset with an unrestricted model that also includes lagged values of the candidate predictor. A significant test means incremental predictive information under that specification; it does **not** establish economic causality.
+the walk-forward scanner produced the following reference result:
+
+| Metric | Reference result |
+|---|---:|
+| Net total return | 13.98% |
+| Gross total return | 20.86% |
+| CAGR | 2.87% |
+| Annualised volatility | 5.23% |
+| Sharpe ratio | 0.57 |
+| Maximum drawdown | -6.46% |
+| Trades | 52 |
+| Win rate | 55.8% |
+| Active rebalance periods | 6 of 19 |
+| Unique relationships selected | 7 |
+| Approximate break-even one-way cost | 35.6 bps |
+
+The aggregate result is concentrated rather than broad. `MFG -> SMFG` contributed most of the positive historical result, with 13 trades and approximately +14.67% net scanner contribution. The project therefore does not present seven independent alpha sources.
+
+These figures are a research snapshot, not a promise that a fresh Yahoo Finance universe will reproduce the same result.
+
+## Investment-monitor example
+
+After refreshing market data through 2026-08-24, the monitor identified two Tier B relationships:
+
+- `V -> MA`: Mastercard downside bias, one-observation horizon, leader z-score about +2.11, model response component about -0.29%
+- `DUK -> SO`: Southern Company downside bias, four-observation horizon, leader z-score about +1.62, model response component about -0.30%
+
+Neither relationship had established scanner-backtest support in that snapshot, so neither qualified for Tier A.
+
+`MFG -> SMFG` remained Tier C because its historical support was positive but the latest leader shock was too small.
+
+This distinction is intentional: current statistical timing and historical trading support are separate pieces of evidence.
+
+## Why the project is conservative
+
+The notebook intentionally avoids several common research shortcuts:
+
+- no forward-filling across mismatched trading calendars
+- no unequal lag sample sizes
+- no uncorrected multiple-lag claims
+- no causal interpretation of Granger tests
+- no same-interval follower execution after observing the leader close
+- no zero-cost strategy reporting
+- no fixed leader/follower assumption through the entire backtest
+- no forced scanner position when no relationship passes the selected gate
+- no promotion of a current signal to Tier A without historical scanner support
+
+## Important limitations
+
+The results should be interpreted with several constraints in mind.
+
+### Current-universe survivorship bias
+
+The scanner uses a universe screened from Yahoo Finance today. Historical walk-forward selection is valid conditional on that universe, but the security list is not a point-in-time historical constituent database. Delisted and failed securities may therefore be absent.
+
+### Daily market-session timing
+
+Daily bars cannot fully resolve differences in market hours, time zones, ADR trading, futures settlement conventions or information arrival during overlapping sessions.
+
+### Yahoo Finance
+
+Yahoo Finance is appropriate for research and portfolio demonstration, but it is not institutional market data.
+
+### Sparse strategy evidence
+
+The strongest scanner specification is supported by a modest number of trades and active periods. Performance is concentrated in a small number of relationships and recent regimes.
+
+### Short implementation
+
+A downside follower bias is a statistical direction, not an assumption that the security can or should be shorted. Real implementation would require borrow availability, financing costs, position sizing and portfolio risk controls.
+
+### Statistical significance
+
+Small p-values do not guarantee economic significance, stability or profitability. Many current models have low forward $R^2$, which is why the monitor reports both evidence and estimated response magnitude.
+
+## Repository structure
+
+```text
+.
+├── cross_asset_correlation_lead_lag.ipynb
+├── README.md
+├── requirements.txt
+├── .gitignore
+└── docs/
+    └── FORMULA_GUIDE.md
+```
 
 ## Installation
 
-Clone the repository and install the dependencies:
+Create a Python environment and install:
 
 ```bash
 pip install -r requirements.txt
@@ -123,30 +282,34 @@ Then open:
 cross_asset_correlation_lead_lag.ipynb
 ```
 
-in JupyterLab, Jupyter Notebook or VS Code and run the notebook from top to bottom.
+in JupyterLab, Jupyter Notebook or VS Code.
 
-## Repository structure
+Run the notebook from top to bottom. The network-heavy Discover and Scanner Backtest actions are button-driven inside the Strategy Lab.
+
+## Main dependencies
+
+- pandas
+- numpy
+- matplotlib
+- yfinance
+- scipy
+- statsmodels
+- ipywidgets
+- jupyterlab
+
+## Reproducibility and security
+
+The repository does not require API credentials for Yahoo Finance.
+
+Local environment files are ignored through `.gitignore`:
 
 ```text
-.
-├── cross_asset_correlation_lead_lag.ipynb
-├── README.md
-├── requirements.txt
-└── assets/
-    ├── default_normalised_prices.png
-    ├── default_rolling_correlation.png
-    ├── default_equal_sample_lead_lag.png
-    ├── default_bootstrap.png
-    ├── default_granger.png
-    └── default_rolling_lag_stability.png
+.env
+.env.*
 ```
 
-## Limitations
-
-Daily timing cannot fully resolve differences in market hours, settlement conventions or time zones. Yahoo Finance is suitable for research and portfolio demonstration but is not institutional market data. Continuous futures can embed contract-roll mechanics. Correlation and Granger predictive information are not causal identification. Results depend on the sample, frequency, lag range and rolling-window design, and a historical relationship may not persist out of sample.
-
-The notebook intentionally reports these limitations alongside the statistics so that a small p-value is never presented as sufficient evidence of a stable or tradable effect.
+An `.env.example` file may be committed when it contains placeholders only. Real credentials should remain outside version control.
 
 ## Research use
 
-This repository is an educational and quantitative-research project. It is not investment advice.
+This repository is an educational quantitative-research project. It is not investment advice.
